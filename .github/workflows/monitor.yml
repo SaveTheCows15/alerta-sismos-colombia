@@ -1,10 +1,9 @@
-name: Monitor de Sismos Colombia (SGC)
+name: Monitor de Sismos Colombia
 
 on:
   schedule:
-    # Se ejecuta automáticamente cada 5 minutos
     - cron: '*/5 * * * *'
-  workflow_dispatch: # Permite probar el script manualmente con un clic
+  workflow_dispatch:
 
 jobs:
   check-earthquakes:
@@ -19,14 +18,14 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Instalar librerías necesarias
+      - name: Instalar librerías
         run: |
           pip install requests
 
       - name: Ejecutar script de rastreo
         run: python sismos.py
 
-      - name: Guardar historial de sismos procesados
+      - name: Guardar historial
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
