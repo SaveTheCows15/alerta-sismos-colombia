@@ -1,4 +1,4 @@
-nname: Monitor de Sismos Colombia
+name: Monitor de Sismos Colombia
 
 on:
   schedule:
