@@ -1,5 +1,34 @@
 #!/usr/bin/env python3
+"""
+Consulta el feed público de sismos del Servicio Geológico Colombiano (SGC)
+y envía una notificación a ntfy.sh por cada sismo nuevo.
 
+Fuente de datos:
+  Es el mismo feed GeoJSON que consume el visor oficial
+  https://www.sgc.gov.co/sismos (se descubrió inspeccionando las
+  peticiones de red del visor con las herramientas de desarrollador
+  del navegador). No es una API "oficial" documentada por el SGC, así
+  que podría cambiar sin aviso.
+
+    https://archive.sgc.gov.co/feed/v1.0.1/summary/five_days_all.json
+
+  Es un GeoJSON FeatureCollection: cada sismo trae un "id" único
+  (ej. "SGC2026prsyru"), su geometría [lon, lat, profundidad_km] y
+  propiedades como "mag", "place", "localTime", "status", etc.
+  El feed cubre los últimos 5 días.
+
+Cómo evita duplicados:
+  Guarda en state/seen_ids.json el conjunto de IDs de sismos ya
+  notificados. Como el feed siempre trae los últimos 5 días completos,
+  en cada corrida basta con comparar el set de IDs actual contra el
+  guardado: lo nuevo son los IDs que aparecen y antes no estaban.
+  El workflow de GitHub Actions hace commit de ese archivo después de
+  cada ejecución para que el estado persista entre runs.
+
+  En la primera corrida (sin estado previo) NO se notifica nada, solo
+  se guarda la línea base — así se evita mandar de golpe los sismos de
+  los últimos 5 días.
+"""
 
 import json
 import os
