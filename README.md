@@ -6,7 +6,7 @@ del Servicio Geológico Colombiano (SGC) y envía una notificación a
 
 ## Cómo funciona
 
-1. Cada 10 minutos, GitHub Actions ejecuta `scripts/check_sismos.py`.
+1. Cada 5 minutos, GitHub Actions ejecuta `scripts/check_sismos.py`.
 2. El script consulta el servicio ArcGIS público que alimenta el
    visor oficial (`sgc.gov.co/sismos`) y trae los últimos sismos.
 3. Compara contra `state/last_sismo.json` (el último sismo ya
