@@ -1,7 +1,7 @@
 import os
 import requests
 
-# Endpoint oficial de ArcGIS encontrado
+# Endpoint ArcGIS
 ARCGIS_URL = "https://services1.arcgis.com/Og2nrTKe5bptW02d/arcgis/rest/services/MAPAGEOLOGIA/FeatureServer/1/query?where=1%3D1&outFields=*&outSR=4326&f=json"
 NTFY_TOPIC = "sismoscolombiaalerta998"
 SEEN_FILE = "vistos.txt"
@@ -28,20 +28,18 @@ try:
         
         new_seen = set(seen_ids)
         
-        for feature in features:
+        # Procesar solo los primeros 5 para evitar enviar los 1000 de golpe
+        for feature in features[:5]:
             attrs = feature.get('attributes', {})
             
-            # Obtener ID único del registro
             object_id = str(attrs.get('OBJECTID') or attrs.get('FID') or attrs.get('GlobalID') or '')
-            
-            # Mapear campos habitualmente presentes en capas sísmicas o geológicas
             municipio = attrs.get('MUNICIPIO') or attrs.get('LOCALIZACION') or attrs.get('Nombre') or attrs.get('TITLE') or 'Colombia'
             departamento = attrs.get('DEPARTAMENTO') or ''
             magnitud = attrs.get('MAGNITUD') or attrs.get('MAGNITUDE') or attrs.get('M') or 'N/A'
             profundidad = attrs.get('PROFUNDIDAD') or attrs.get('DEPTH') or 'N/A'
 
             if object_id and object_id not in seen_ids:
-                titulo = f"M {magnitud} - {municipio}"
+                titulo = f"Sismo M {magnitud} - {municipio}"
                 if departamento:
                     titulo += f", {departamento}"
                 
@@ -50,20 +48,21 @@ try:
                 print(f"--> ¡NUEVO EVENTO DETECTADO!: {titulo}")
                 print("    Enviando notificación a ntfy...")
                 
-                # Enviar notificación urgente
+                # Armamos el mensaje codificado explícitamente en UTF-8 en el cuerpo
+                mensaje_completo = f"🚨 ALERTA SGC\n{titulo}\n{detalle}"
+                
                 res = requests.post(
                     f"https://ntfy.sh/{NTFY_TOPIC}",
-                    data=f"{titulo}\n{detalle}".encode('utf-8'),
+                    data=mensaje_completo.encode('utf-8'),
                     headers={
                         "Priority": "5",
-                        "Tags": "warning,rotating_light",
-                        "Title": "🚨 ALERTA SGC (ARCGIS)"
+                        "Tags": "warning,rotating_light"
                     }
                 )
                 print(f"    Respuesta de ntfy: {res.status_code}")
                 new_seen.add(object_id)
 
-        # Actualizar lista de vistos
+        # Actualizar historial para no volver a enviar los 1000
         with open(SEEN_FILE, "w") as f:
             for s_id in new_seen:
                 f.write(f"{s_id}\n")
