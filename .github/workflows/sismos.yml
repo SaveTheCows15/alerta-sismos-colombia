@@ -2,9 +2,9 @@ name: Sismos SGC -> ntfy.sh
 
 on:
   schedule:
-    # Cada 10 minutos. GitHub Actions no garantiza puntualidad exacta
+    # Cada 5 minutos. GitHub Actions no garantiza puntualidad exacta
     # en el schedule, puede haber unos minutos de retraso.
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}  # permite ejecutarlo manualmente desde la pestaña Actions
 
 permissions:
