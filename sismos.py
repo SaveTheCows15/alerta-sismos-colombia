@@ -6,8 +6,8 @@ import time
 NTFY_TOPIC = "sismoscolombiaalerta998"
 SEEN_FILE = "vistos.txt"
 
-# Feed alternativo que convierte la cuenta de X/Twitter del SGC (@sgccol) en RSS
-SGC_TWITTER_RSS = "https://rsshub.app/twitter/user/sgccol"
+# Endpoint de datos abiertos del SGC y respaldo del USGS
+SGC_GEOJSON = "https://sismo.sgc.gov.co/api/v1/sismos/ultimos"
 USGS_RSS = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.atom"
 
 seen_ids = set()
@@ -17,66 +17,71 @@ if os.path.exists(SEEN_FILE):
 
 def enviar_alerta(titulo, detalle):
     headers = {
-        "Title": "🚨 ALERTA SISMO COLOMBIA 🚨",
+        "Title": f"🚨 {titulo} 🚨",
         "Priority": "5",
         "Sound": "warning",
         "Tags": "warning,earthquake"
     }
-    # Primera ráfaga
-    requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=f"{titulo}\n{detalle}".encode('utf-8'), headers=headers)
+    # Ráfaga 1
+    requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=detalle.encode('utf-8'), headers=headers)
     time.sleep(2)
-    # Segunda ráfaga de insistencia
-    requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=f"¡ALERTA MÁXIMA! {titulo}".encode('utf-8'), headers=headers)
+    # Ráfaga 2 de insistencia
+    requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=f"¡ALERTA MÁXIMA! {detalle}".encode('utf-8'), headers=headers)
 
-exito_sgc = False
 new_seen = set(seen_ids)
+exito = False
 
-# --- INTENTO 1: Twitter del Servicio Geológico Colombiano (@sgccol) ---
+# --- INTENTO 1: Servicio Geológico Colombiano (API Directa) ---
 try:
-    print("Consultando reportes de X/Twitter del SGC...")
-    headers_req = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(SGC_TWITTER_RSS, headers=headers_req, timeout=10)
+    print("Consultando Servicio Geológico Colombiano (SGC)...")
+    headers_req = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json"
+    }
+    res = requests.get(SGC_GEOJSON, headers=headers_req, timeout=10)
     
     if res.status_code == 200:
-        root = ET.fromstring(res.content)
-        # Revisamos los últimos tweets
-        for item in root.findall('.//item'):
-            tweet_id = item.find('guid').text if item.find('guid') is not None else item.find('link').text
-            tweet_text = item.find('description').text if item.find('description') is not None else ""
-            title_text = item.find('title').text if item.find('title') is not None else ""
-
-            contenido = (title_text + " " + tweet_text).lower()
-
-            # Buscamos tweets que hablen de un sismo recién reportado
-            if ("boletín" in contenido or "sismo" in contenido) and tweet_id not in seen_ids:
-                print(f"¡NUEVO SISMO PUBLICADO POR EL SGC EN TWITTER!: {title_text}")
-                enviar_alerta("Reporte SGC (Oficial)", title_text)
-                new_seen.add(tweet_id)
+        datos = res.json()
+        # Procesar si la respuesta viene como lista o diccionario
+        eventos = datos if isinstance(datos, list) else datos.get('features', datos.get('data', []))
         
-        exito_sgc = True
-        print("Consulta a X/SGC completada.")
-
+        for sismo in eventos[:5]:
+            # Extraer propiedades según estructura JSON
+            prop = sismo.get('properties', sismo)
+            event_id = str(prop.get('id', prop.get('eventId', prop.get('fecha_utc'))))
+            municipio = prop.get('municipio', prop.get('localizacion', 'Colombia'))
+            magnitud = prop.get('magnitud', prop.get('mag', 'N/A'))
+            
+            if event_id and event_id not in seen_ids:
+                msg = f"Sismo M{magnitud} en {municipio} (Fuente: SGC)"
+                print(f"¡NUEVO SISMO SGC!: {msg}")
+                enviar_alerta("ALERTA SISMO COLOMBIA (SGC)", msg)
+                new_seen.add(event_id)
+        
+        exito = True
+        print("Consulta a SGC exitosa.")
 except Exception as e:
-    print(f"No se pudo consultar el Twitter del SGC directamente: {e}")
+    print(f"Aviso: SGC no disponible en esta iteración ({e}). Usando fuente de respaldo...")
 
-# --- INTENTO 2 (Respaldo USGS): Si X no responde o está saturado ---
-if not exito_sgc:
+# --- INTENTO 2: Respaldo USGS (Garantiza que nunca falle la ejecución) ---
+if not exito:
     try:
-        print("Usando servidor de respaldo USGS...")
-        res_usgs = requests.get(USGS_RSS, timeout=10)
-        if res_usgs.status_code == 200:
-            root_u = ET.fromstring(res_usgs.content)
+        print("Consultando respaldo USGS...")
+        res_u = requests.get(USGS_RSS, timeout=10)
+        if res_u.status_code == 200:
+            root = ET.fromstring(res_u.content)
             ns = {'atom': 'http://www.w3.org/2005/Atom'}
-            for entry in root_u.findall('atom:entry', ns):
+            for entry in root.findall('atom:entry', ns):
                 event_id = entry.find('atom:id', ns).text
                 title = entry.find('atom:title', ns).text
                 
                 if "colombia" in title.lower() and event_id not in seen_ids:
-                    print(f"¡SISMO EN DETECTADO POR USGS!: {title}")
-                    enviar_alerta("Alerta Sismológica", title)
+                    print(f"¡NUEVO SISMO USGS!: {title}")
+                    enviar_alerta("ALERTA SISMO COLOMBIA", title)
                     new_seen.add(event_id)
+            print("Consulta a USGS exitosa.")
     except Exception as e:
-        print(f"Error en respaldo USGS: {e}")
+        print(f"Error procesando respaldo: {e}")
 
 # Guardar historial
 with open(SEEN_FILE, "w") as f:
