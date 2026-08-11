@@ -33,7 +33,7 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           # Opcional: sube este umbral si solo te interesan sismos fuertes
-          MIN_MAGNITUDE: "0"
+          MIN_MAGNITUDE: "3.5"
         run: python scripts/check_sismos.py
 
       - name: Guardar estado (commit de los IDs de sismos ya notificados)
