@@ -2,34 +2,32 @@ name: Monitor de Sismos Colombia
 
 on:
   schedule:
-    # Se ejecuta automáticamente cada 5 minutos
+    # Ejecutar cada 5 minutos
     - cron: '*/5 * * * *'
-  workflow_dispatch: # Permite probarlo manualmente cuando quieras
+  workflow_dispatch: # Permite probarlo manualmente
 
 jobs:
   check-earthquakes:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Descargar el repositorio
-        uses: actions/checkout@v3
+      - name: Descargar código del repositorio
+        uses: actions/checkout@v4
 
       - name: Configurar Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
       - name: Instalar librerías
-        run: |
-          pip install requests
+        run: pip install requests
 
       - name: Ejecutar script de rastreo
         run: python sismos.py
 
-      - name: Guardar historial
+      - name: Guardar historial de sismos notificados
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add vistos.txt
-          git commit -m "Update vistos.txt [skip ci]" || exit 0
-          git push
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add vistos.txt || true
+          git commit -m "Actualizar sismos procesados" || true
+          git push || true
