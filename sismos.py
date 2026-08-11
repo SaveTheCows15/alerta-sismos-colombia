@@ -1,59 +1,73 @@
 import os
 import requests
+from datetime import datetime
 
-# Endpoint ArcGIS
-ARCGIS_URL = "https://services1.arcgis.com/Og2nrTKe5bptW02d/arcgis/rest/services/MAPAGEOLOGIA/FeatureServer/1/query?where=1%3D1&outFields=*&outSR=4326&f=json"
+# API oficial de Sismicidad SGC en la nube de ArcGIS
+ARCGIS_SISMOS_URL = (
+    "https://services1.arcgis.com/Og2nrTKe5bptW02d/arcgis/rest/services/"
+    "Sismicidad_Ultimo_Mes/FeatureServer/0/query"
+    "?where=1%3D1&outFields=*&orderByFields=FECHA_UTC+DESC&resultRecordCount=10&f=json"
+)
+
 NTFY_TOPIC = "sismoscolombiaalerta998"
 SEEN_FILE = "vistos.txt"
 
-print("--- INICIANDO RASTREO (ARCGIS REST API) ---")
+print("--- INICIANDO RASTREO (SGC SISMICIDAD ARCGIS) ---")
 
-# Cargar sismos ya procesados
 seen_ids = set()
 if os.path.exists(SEEN_FILE):
     with open(SEEN_FILE, "r") as f:
         seen_ids = set(f.read().splitlines())
-    print(f"Registros en memoria ({len(seen_ids)} cargados)")
+    print(f"Sismos en memoria ({len(seen_ids)} cargados)")
 
 try:
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    print("Consultando servidor ArcGIS...")
-    response = requests.get(ARCGIS_URL, headers=headers, timeout=12)
+    print("Consultando dataset de sismicidad del SGC...")
+    response = requests.get(ARCGIS_SISMOS_URL, headers=headers, timeout=12)
     print(f"Estado HTTP: {response.status_code}")
     
     if response.status_code == 200:
         data = response.json()
         features = data.get('features', [])
-        print(f"Total de registros leídos desde ArcGIS: {len(features)}")
+        print(f"Total de sismos leídos del SGC: {len(features)}")
         
         new_seen = set(seen_ids)
         
-        # Procesar solo los primeros 5 para evitar enviar los 1000 de golpe
-        for feature in features[:5]:
+        for feature in features:
             attrs = feature.get('attributes', {})
             
-            object_id = str(attrs.get('OBJECTID') or attrs.get('FID') or attrs.get('GlobalID') or '')
-            municipio = attrs.get('MUNICIPIO') or attrs.get('LOCALIZACION') or attrs.get('Nombre') or attrs.get('TITLE') or 'Colombia'
+            # ID único del evento en SGC
+            object_id = str(attrs.get('OBJECTID') or attrs.get('EVENT_ID') or attrs.get('GlobalID') or '')
+            
+            # Atributos de la capa de Sismicidad
+            municipio = attrs.get('MUNICIPIO') or attrs.get('LOCALIZACION') or 'Colombia'
             departamento = attrs.get('DEPARTAMENTO') or ''
-            magnitud = attrs.get('MAGNITUD') or attrs.get('MAGNITUDE') or attrs.get('M') or 'N/A'
-            profundidad = attrs.get('PROFUNDIDAD') or attrs.get('DEPTH') or 'N/A'
+            magnitud = attrs.get('MAGNITUD') or attrs.get('MAGNITUDE') or 'N/A'
+            profundidad = attrs.get('PROFUNDIDAD') or 'N/A'
+            
+            # Formatear la fecha si viene en Timestamp Unix (milisegundos)
+            fecha_ms = attrs.get('FECHA_UTC') or attrs.get('FECHA')
+            fecha_str = ""
+            if fecha_ms and isinstance(fecha_ms, (int, float)):
+                fecha_str = datetime.utcfromtimestamp(fecha_ms / 1000.0).strftime('%Y-%m-%d %H:%M UTC')
 
             if object_id and object_id not in seen_ids:
-                titulo = f"Sismo M {magnitud} - {municipio}"
+                titulo = f"M {magnitud} - {municipio}"
                 if departamento:
                     titulo += f", {departamento}"
                 
-                detalle = f"Profundidad: {profundidad} km" if profundidad != 'N/A' else "Reporte de sensor SGC"
+                detalle = f"Profundidad: {profundidad} km"
+                if fecha_str:
+                    detalle += f"\nFecha: {fecha_str}"
 
-                print(f"--> ¡NUEVO EVENTO DETECTADO!: {titulo}")
+                print(f"--> ¡NUEVO SISMO DETECTADO!: {titulo}")
                 print("    Enviando notificación a ntfy...")
                 
-                # Armamos el mensaje codificado explícitamente en UTF-8 en el cuerpo
-                mensaje_completo = f"🚨 ALERTA SGC\n{titulo}\n{detalle}"
+                mensaje = f"🚨 ALERTA SGC COLOMBIA\n{titulo}\n{detalle}"
                 
                 res = requests.post(
                     f"https://ntfy.sh/{NTFY_TOPIC}",
-                    data=mensaje_completo.encode('utf-8'),
+                    data=mensaje.encode('utf-8'),
                     headers={
                         "Priority": "5",
                         "Tags": "warning,rotating_light"
@@ -62,15 +76,15 @@ try:
                 print(f"    Respuesta de ntfy: {res.status_code}")
                 new_seen.add(object_id)
 
-        # Actualizar historial para no volver a enviar los 1000
+        # Guardar historial
         with open(SEEN_FILE, "w") as f:
             for s_id in new_seen:
                 f.write(f"{s_id}\n")
 
     else:
-        print("No se pudo obtener respuesta del servidor ArcGIS.")
+        print("No se pudo obtener respuesta del servidor de sismicidad.")
 
     print("--- FIN DEL RASTREO ---")
 
 except Exception as e:
-    print(f"Ocurrió un error consultando ArcGIS: {e}")
+    print(f"Error consultando ArcGIS SGC: {e}")
