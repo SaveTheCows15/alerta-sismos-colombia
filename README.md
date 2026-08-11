@@ -21,5 +21,3 @@ del Servicio Geológico Colombiano (SGC) y envía una notificación a
 > sin aviso. Si un día deja de llegar nada, revisa primero si cambió
 > algo en https://srvags.sgc.gov.co/arcgis/rest/services/catalogo_sismos/catalogo_de_sismos_2/FeatureServer/0
 
-python scripts/check_sismos.py
-```
