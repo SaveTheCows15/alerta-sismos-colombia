@@ -36,10 +36,10 @@ jobs:
           MIN_MAGNITUDE: "0"
         run: python scripts/check_sismos.py
 
-      - name: Guardar estado (commit del último sismo visto)
+      - name: Guardar estado (commit de los IDs de sismos ya notificados)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add state/last_sismo.json
-          git diff --cached --quiet && echo "Sin cambios en el estado" || git commit -m "Actualiza último sismo notificado [skip ci]"
+          git add state/seen_ids.json
+          git diff --cached --quiet && echo "Sin cambios en el estado" || git commit -m "Actualiza sismos ya notificados [skip ci]"
           git push
